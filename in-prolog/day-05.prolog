@@ -24,7 +24,9 @@ get-commands(StreamIn, Acc, Result) :-
     reverse(Acc, Result).
 get-commands(StreamIn, Acc, Result) :-
     read_line_to_string(StreamIn, S),
-    get-commands(StreamIn, [S|Acc], Result).
+    split_string(S, "move from to", "", S2),
+    term(S2, S3),
+    get-commands(StreamIn, [S3|Acc], Result).
 
 build-stacks(Input, Stacks) :-
     findall(Ts,
@@ -34,7 +36,11 @@ build-stacks(Input, Stacks) :-
     stacks(Labels, Layers, Stacks).
 
 stacks(Labels, Layers, Stacks) :-
-    findall(X-[], member(X,Labels), Stacks0),
+    findall( X-[],
+             ( member(S,Labels),
+               term_string(X, S)
+             ),
+             Stacks0),
     build_stacks(Stacks0, Layers, Stacks).
 
 build_stacks(Stacks, [], Stacks).
@@ -53,10 +59,9 @@ layers(S, [""|Stacks]) :-
     string_concat("   ", S2, S), !,
     after_gap(S2, S0),
     layers(S0, Stacks).
-layers(S, [T|Stacks]) :-
+layers(S, [X|Stacks]) :-
     string_concat(X, S2, S),
     string_length(X, 3), !,
-    term(X, T),
     after_gap(S2, S0),
     layers(S0, Stacks).
 
@@ -65,9 +70,10 @@ after_gap("", "") :- !.
 after_gap(S, R) :-
     string_concat(" ", R, S).
 
-term(X, X).
-    %trace,
-    %write(X).
+term([_,_,_,_,_,N0,_,_,_,_,_,From0,_,_,_,To0], N-From/To) :-
+    number_string(N, N0),
+    number_string(From, From0),
+    number_string(To, To0).
 
 solution((R,S)) :-
     read-input(input, (R,S)),
