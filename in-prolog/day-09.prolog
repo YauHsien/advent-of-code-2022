@@ -807,22 +807,14 @@ solution(N) :-
 %% Simulate your complete series of motions on a larger rope with ten knots. How many positions does the tail of the rope visit at least once?
 
 % My understanding:
-% Each knot may "want to do its best" to response the change.
-% A knot can try each of 9 cells to find the best place to fit the vacancy
-% which is left by its before knot.
-
-move((X,Y), (X,Z)) :- Z is Y - 1.
-move((X,Y), (Z,Y)) :- Z is X - 1.
-move((X,Y), (X,Z)) :- Z is Y + 1.
-move((X,Y), (Z,Y)) :- Z is X + 1.
-move((X,Y), (W,Z)) :- W is X - 1, Z is Y - 1.
-move((X,Y), (W,Z)) :- W is X - 1, Z is Y + 1.
-move((X,Y), (W,Z)) :- W is X + 1, Z is Y - 1.
-move((X,Y), (W,Z)) :- W is X + 1, Z is Y + 1.
-move((X,Y), (X,Y)).
-
-adjacent((X,Y), (W,Z)) :-
-    move((X,Y), (W,Z)), !.
+% .1. -> 1.. -> 12.  Then the former knot and the later knot form a rectangle,
+% ..2    ..2    ...  those knot will meet at the longer side of the rectangle.
+%
+% ....    1...  Somehow knots arrange in diagonal, such as 3 and 4, and when
+% 1...    2...  3 moves to N-W, knot 4 will keep in diagonal with knot 3,
+% .2.. -> .3..  because they form a square.
+% ..3.    ..4.
+% ...4    ....
 
 effect([A-X-Y|Rope], 'U', [A-X-Y2|Rope]) :-
     Y2 is Y - 1.
@@ -833,15 +825,33 @@ effect([A-X-Y|Rope], 'L', [A-X2-Y|Rope]) :-
 effect([A-X-Y|Rope], 'R', [A-X2-Y|Rope]) :-
     X2 is X + 1.
 
+move_by((X,Y), (Z,Y), (X2,Y)) :-
+    abs(X-Z, 2), !,
+    X2 is (X+Z) / 2.
+move_by((X,Y), (X,Z), (X,Y2)) :- !,
+    abs(Y-Z, 2), !,
+    Y2 is (Y+Z) / 2.
+move_by((X,Y), (W,Z), (X2,Z)) :-
+    abs(X-W, 2),
+    abs(Y-Z, 1), !,
+    X2 is (X+W) / 2.
+move_by((X,Y), (W,Z), (W,Y2)) :-
+    abs(X-W, 1),
+    abs(Y-Z, 2), !,
+    Y2 is (Y+Z) / 2.
+move_by((X,Y), (W,Z), (X2,Y2)) :-
+    abs(X-W, 2),
+    abs(Y-Z, 2), !,
+    X2 is (X+W) / 2,
+    Y2 is (Y+Z) / 2.
+
 chain_effect([X], Acc, Rope) :-
     reverse([X|Acc], Rope).
 chain_effect([A-X-Y,B-W-Z|Rope0], Acc, Rope) :-
-    adjacent((X,Y), (W,Z)), !,
-    chain_effect([B-W-Z|Rope0], [A-X-Y|Acc], Rope).
-chain_effect([A-X-Y,B-W-Z|Rope0], Acc, Rope) :-
-    move((W,Z), (X2,Y2)),
-    adjacent((X,Y), (X2,Y2)), !,
+    move_by((W,Z), (X,Y), (X2,Y2)), !,
     chain_effect([B-X2-Y2|Rope0], [A-X-Y|Acc], Rope).
+chain_effect([A-X-Y,B-W-Z|Rope0], Acc, Rope) :-
+    chain_effect([B-W-Z|Rope0], [A-X-Y|Acc], Rope).
 
 walkthrough(_, [], Trace, Trace).
 walkthrough(Rope, [_-0|Commands], Acc, Trace) :- !,
@@ -849,7 +859,6 @@ walkthrough(Rope, [_-0|Commands], Acc, Trace) :- !,
 walkthrough(Rope, [C-N|Commands], Acc, Trace) :-
     effect(Rope, C, Rope0),
     chain_effect(Rope0, [], Rope2),
-    %append(_, [_-X-Y], Rope2),
     N2 is N - 1,
     walkthrough(Rope2, [C-N2|Commands], [C-N-Rope2|Acc], Trace).
 
@@ -857,10 +866,14 @@ solution2(N) :-
     read-input(input, I),
     findall(A-0-0, between(0,9,A), Rope),
     walkthrough(Rope, I, [(0,0)], T),
-    foreach(member(X, T), writeln(X)),
+    %foreach(member(X, T), writeln(X)),
+    findall( X,
+             ( member(_-_-L, T),
+               append(_, [X], L)
+             ),
+             R ),
     %writeln(T),
-    flatten(T, F),
-    sort(F, S),
+    sort(R, S),
     length(S, N).
 %% (By query `?- solution2(Count)`)
 %% Your puzzle answer was `Count`.
