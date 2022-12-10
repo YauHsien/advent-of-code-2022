@@ -23,28 +23,28 @@ get-result(StreamIn, Acc, Result) :-
     ).
 
 loop(_, [], _, _, Result, Result).
-loop(Nth, ["noop"|Input], Reg, Collection, Acc, Result) :-
-    Nth2 is Nth + 1,
-    ( member(Nth2, Collection), !,
-      Acc2 = [Nth2*Reg|Acc]
-    ; Acc2 = Acc
-    ),
-    loop(Nth2, Input, Reg, Collection, Acc2, Result).
-loop(Nth, ["addx"-N|Input], Reg, Collection, Acc, Result) :-
-    Nth0 is Nth + 1,
-    Nth2 is Nth + 2,
+loop(Nth0, ["noop"|Input], Reg, Goal, Acc, Result) :-
+    Nth is Nth0 + 1,
+    cycle(Nth, Reg, Acc, Goal, Acc2),
+    loop(Nth, Input, Reg, Goal, Acc2, Result).
+loop(Nth0, ["addx"-N|Input], Reg, Goal, Acc, Result) :-
+    Nth is Nth0 + 1,
+    Nth2 is Nth0 + 2,
+    cycle(Nth, Reg, Acc, Goal, Acc0),
+    cycle(Nth2, Reg, Acc0, Goal, Acc2),
     Reg2 is Reg + N,
-    ( member(Nth0, Collection), !,
-      Acc2 = [Nth0*Reg|Acc]
-    ; member(Nth2, Collection), !,
-      Acc2 = [Nth2*Reg|Acc]
-    ; Acc2 = Acc
-    ),
-    loop(Nth2, Input, Reg2, Collection, Acc2, Result).
+    loop(Nth2, Input, Reg2, Goal, Acc2, Result).
+
+cycle(Nth, Reg, Acc, Goal, Result) :-
+    apply(Goal, [Nth, Reg, Acc, Result]).
+
+filter(Nth, Reg, Acc, [Nth*Reg|Acc]) :-
+    member(Nth, [20,60,100,140,180,220]), !.
+filter(_, _, Result, Result).
 
 solution(S) :-
     read-input(input, I),
-    loop(0, I, 1, [20, 60, 100, 140, 180, 220], [], R),
+    loop(0, I, 1, filter, [], R),
     writeln(R),
     sum_list(R, S).
 
