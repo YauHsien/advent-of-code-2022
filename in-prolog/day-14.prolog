@@ -7,6 +7,13 @@ output(File) :-
     source_file(day14, F),
     relative_file_name(File, F, 'day-14.output').
 
+:- dynamic rock/2, void/2, pour/2.
+:- assertz(pour(500, 0)).
+
+clear_database :-
+    abolish(rock/2),
+    abolish(void/2).
+
 read-input(StreamAlias, Result) :-
     input(FileName),
     open(FileName, read, _Fd, [alias(StreamAlias)]),
@@ -30,10 +37,10 @@ get-result(StreamIn, Acc, Result) :-
     read_line_to_string(StreamIn, S),
     split_string(S, " ", "", S0),
     findall(A-B, ( member(T, S0),
-                 T \= "->",
-                 split_string(T, ",", "", [A0,B0]),
-                 number_string(A, A0),
-                 number_string(B, B0) ), L0),
+                   T \= "->",
+                   split_string(T, ",", "", [A0,B0]),
+                   number_string(A, A0),
+                   number_string(B, B0) ), L0),
     pairs(L0, L),
     append(Acc, L, Acc2),
     get-result(StreamIn, Acc2, Result).
@@ -41,7 +48,15 @@ get-result(StreamIn, Acc, Result) :-
 pairs([_], []).
 pairs([A,B|L], [(A2,B2)|R]) :-
     sort([A,B], [A2,B2]),
+    mark_rock(A2, B2),
     pairs([B|L], R).
+
+mark_rock(X-Y, X-Z) :- !,
+    foreach( between(Y, Z, Y0),
+             assertz(rock(X, Y0)) ).
+mark_rock(X-Y, Z-Y) :-
+    foreach( between(X, Z, X0),
+             assertz(rock(X0, Y)) ).
 
 % My understanding:
 % Sand stack is limited by
@@ -49,59 +64,67 @@ pairs([A,B|L], [(A2,B2)|R]) :-
 % 2. Lower wall, when length of a wall is shorter than of a platform;
 % 3. Shorter platform, whe length of a wall is longer than of a platform.
 
-dots(WoPs, Dots) :-
-    dots(WoPs, [], Dots).
-
-dots([], Dots, Dots).
-dots([H|L], Acc, Dots) :-
-    findall(X0, ( member((X-Y,X-Z), H),
-                  between(Y, Z, D),
-                  X0 = X-D
-                ; member((X-Y,Z-Y), H),
-                  between(Y, Z, D),
-                  X0 = D-Y
-                ), R),
-    append(Acc, R, Acc2),
-    dots(L, Acc2, Dots).
-
-show_map(I-J, X-W, _-Z, Dots) :-
-    foreach( between(J, Z, Y0),
-             ( foreach( between(X, W, X0),
-                        ( X0-Y0 = I-J,
-                          write(x)
-                        ; X0-Y0 \= I-J,
-                          member(X0-Y0, Dots),
-                          write(#)
-                        ; X0-Y0 \= I-J,
-                          \+ member(X0-Y0, Dots),
-                          write('.')
-                        ) )
-             , nl
-             ) ).
-
-write_map(OutAlias, I-J, X-W, _-Z, Dots) :-
-    foreach( between(J, Z, Y0),
-             ( foreach( between(X, W, X0),
-                        ( X0-Y0 = I-J,
-                          put_char(OutAlias, x)
-                        ; X0-Y0 \= I-J,
-                          member(X0-Y0, Dots),
+write_map(OutAlias, X0-X2, Y2) :-
+    A is X0,
+    B is X2,
+    C is Y2,
+    pour(I, J),
+    foreach( between(J, C, Y),
+             ( foreach( between(A, B, X),
+                        ( X-Y = I-J,
+                          put_char(OutAlias, +)
+                        ; X-Y \= I-J,
+                          rock(X, Y),
                           put_char(OutAlias, #)
-                        ; X0-Y0 \= I-J,
-                          \+ member(X0-Y0, Dots),
+                        ; X-Y \= I-J,
+                          void(X, Y),
+                          put_char(OutAlias, v)
+                        ; X-Y \= I-J,
+                          \+ rock(X, Y),
+                          \+ rock(X, Y),
                           put_char(OutAlias, '.')
                         ) )
                , put_char(OutAlias, '\n')
              ) ).
 
+put_void(X, Y2-Y0) :-
+    Y2 > Y0,
+    put_void(X, Y2-Y0, []).
+
+put_void(_, Y2-Y0, [W-Z|_]) :-
+    Y2 < Y0, !,
+    assertz(void(W, Z)).
+put_void(_, Y2-Y0, []) :-
+    Y2 < Y0, !.
+put_void(X, Y2-_, _) :-
+    rock(X, Y2), !.
+put_void(X, Y2-Y0, Acc) :-
+    Y is Y2 - 1,
+    ( X0 is X - 1,
+      rock(X0, Y2),
+      put_void(X, Y-Y0, [X-Y2|Acc])
+    ; X2 is X + 1,
+      rock(X2, Y2),
+      put_void(X, Y-Y0, [X-Y2|Acc])
+    ; put_void(X, Y-Y0, Acc)
+    ).
+
+put_void(X0, X2, Y0, Y2) :-
+    A is X0,
+    B is X2,
+    C is Y0,
+    D is Y2,
+    foreach( between(A, B, X),
+             put_void(X, D-C) ).
+
 solution(X0-X2, Y0-Y2, Walls, Platforms) :-
-    Gen = 500-0,
+    clear_database,
     read-input(input, (X0-X2,Y0-Y2,Walls,Platforms)),
-    dots([Walls,Platforms], Dots),
+    put_void(X0-1, X2+1, Y0, Y2),
     ( output(FileName),
       OutAlias = output,
       open(FileName, write, _Fd, [alias(OutAlias)]),
-      write_map(OutAlias, Gen, X0-X2, Y0-Y2, Dots),
+      write_map(OutAlias, (X0-1)-(X2+1), Y2),
       close(OutAlias) ),
     true.
 
