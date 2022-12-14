@@ -7,13 +7,15 @@ output(File) :-
     source_file(day14, F),
     relative_file_name(File, F, 'day-14.output').
 
-:- dynamic rock/2, void/2, pour/2, sand/2.
-:- assertz(pour(500, 0)).
+:- dynamic rock/2, void/2, pour/2, sand/2, meet_void/1.
+:- abolish(pour/2), assertz(pour(500, 0)).
+:- abolish(meet_void/1), assertz(meet_void(false)).
 
 clear_database :-
     abolish(rock/2),
     abolish(void/2),
-    abolish(sand/2).
+    abolish(sand/2),
+    retractall(meet_void(true)).
 
 read-input(StreamAlias, Result) :-
     input(FileName),
@@ -148,14 +150,11 @@ pour(Ylimit) :-
     pour(X, Y),
     pour1(Ylimit, sand(X, Y)).
 
-pour1(Y, sand(X, Y)) :- !,
-    ( sand(X, Y), !
-    ; assertz(void(X, Y)),
-      assertz(sand(X, Y))
-    ).
+pour1(Y, sand(_, Y)) :- !,
+    assert(meet_void(true)).
 pour1(_, sand(X, Y)) :-
     void(X, Y), !,
-    assertz(sand(X, Y)).
+    assert(meet_void(true)).
 pour1(Ylimit, sand(X, Y)) :-
     Y2 is Y + 1,
     air(X, Y2), !,
@@ -177,10 +176,8 @@ pour1(_, sand(X, Y)) :-
 
 keep_pour(Ylimit) :-
     repeat,
-    ( meet_void
-    ; \+ meet_void,
-      sand(_, Ylimit)
-    ; \+ meet_void,
+    ( meet_void(true)
+    ; \+ meet_void(true),
       pour(Ylimit),
       fail
     ).
@@ -196,8 +193,8 @@ solution(X0-X2, Y0-Y2, Walls, Platforms, Rest) :-
       open(FileName, write, _Fd, [alias(OutAlias)]),
       write_map(OutAlias, (X0-1)-(X2+1), Y2),
       close(OutAlias) ),
-    ( findall(_, ( sand(X, Y),
-                   \+ void(X, Y)
+    ( findall(_, ( sand(X, Y)
+                   %\+ void(X, Y)
                  ), L0),
       sort(L0, L),
       length(L, Rest) ),
