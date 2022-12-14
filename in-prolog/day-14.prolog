@@ -91,23 +91,39 @@ put_void(X, Y2-Y0) :-
     Y2 > Y0,
     put_void(X, Y2-Y0, []).
 
-put_void(_, Y2-Y0, [W-Z|_]) :-
+put_void(_, Y2-Y0, Acc) :-
     Y2 < Y0, !,
-    assertz(void(W, Z)).
+    first_void(Acc).
 put_void(_, Y2-Y0, []) :-
     Y2 < Y0, !.
-put_void(X, Y2-_, _) :-
+put_void(X, Y2-_, []) :-
     rock(X, Y2), !.
+put_void(X, Y2-Y0, Acc) :-
+    rock(X, Y2), !,
+    Y is Y2 - 1,
+    meet(Acc, rock(X,Y2), Acc2),
+    put_void(X, Y-Y0, Acc2).
 put_void(X, Y2-Y0, Acc) :-
     Y is Y2 - 1,
     ( X0 is X - 1,
-      rock(X0, Y2),
-      put_void(X, Y-Y0, [X-Y2|Acc])
+      rock(X0, Y2), !,
+      meet(Acc, void(X,Y2), Acc2),
+      put_void(X, Y-Y0, Acc2)
     ; X2 is X + 1,
-      rock(X2, Y2),
-      put_void(X, Y-Y0, [X-Y2|Acc])
+      rock(X2, Y2), !,
+      meet(Acc, void(X,Y2), Acc2),
+      put_void(X, Y-Y0, Acc2)
     ; put_void(X, Y-Y0, Acc)
     ).
+
+first_void([void(X,Y)|_]) :- !,
+    assertz(void(X, Y)).
+first_void([_|L]) :-
+    first_void(L).
+
+meet(Acc, rock(X,Y), [rock(X,Y)|Acc]).
+meet([rock(X,Y)|Acc], void(_,_), [rock(X,Y)|Acc]) :- !.
+meet(Acc, void(X,Y), [void(X,Y)|Acc]).
 
 put_void(X0, X2, Y0, Y2) :-
     A is X0,
