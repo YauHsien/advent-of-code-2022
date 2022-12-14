@@ -186,11 +186,11 @@ write_map(OutAlias, X0-X2, Y2) :-
     pour(I, J),
     foreach( between(J, C, Y),
              ( foreach( between(A, B, X),
-                        ( X-Y = I-J,
-                          put_char(OutAlias, +)
-                        ; X-Y \= I-J,
+                        ( X-Y \= I-J,
                           sand(X, Y),
                           put_char(OutAlias, o)
+                        ; X-Y = I-J,
+                          put_char(OutAlias, +)
                         ; X-Y \= I-J,
                           rock(X, Y),
                           put_char(OutAlias, #)
@@ -254,16 +254,17 @@ air(X, Y) :-
     \+ rock(X, Y),
     \+ sand(X, Y).
 
-meet_void :-
-    void(X, Y),
+block_source :-
+    pour(X, Y),
     sand(X, Y).
 
 pour(Ylimit) :-
     pour(X, Y),
     pour1(Ylimit, sand(X, Y)).
 
-pour1(Y, sand(_, Y)) :- !,
-    assert(meet_void(true)).
+pour1(Ylimit, sand(X, Y)) :-
+    Ylimit =:= Y + 1, !,
+    assertz(sand(X, Y)).
 pour1(_, sand(X, Y)) :-
     void(X, Y), !,
     assert(meet_void(true)).
@@ -274,13 +275,11 @@ pour1(Ylimit, sand(X, Y)) :-
 pour1(Ylimit, sand(X, Y)) :-
     X0 is X - 1,
     Y2 is Y + 1,
-    %air(X0, Y),
     air(X0, Y2), !,
     pour1(Ylimit, sand(X0, Y2)).
 pour1(Ylimit, sand(X, Y)) :-
     X2 is X + 1,
     Y2 is Y + 1,
-    %air(X2, Y),
     air(X2, Y2), !,
     pour1(Ylimit, sand(X2, Y2)).
 pour1(_, sand(X, Y)) :-
@@ -289,7 +288,9 @@ pour1(_, sand(X, Y)) :-
 keep_pour(Ylimit) :-
     repeat,
     ( meet_void(true)
+    ; block_source
     ; \+ meet_void(true),
+      \+ block_source,
       pour(Ylimit),
       fail
     ).
@@ -314,4 +315,76 @@ solution(X0-X2, Y0-Y2, Walls, Platforms, Rest) :-
 %% then consult file "day-14.output" and count up letter `o`,)
 %% Your puzzle answer was `___`.
 
-solution2(_).
+%% --- Part Two ---
+%% You realize you misread the scan. There isn't an endless void at the bottom of the scan - there's floor, and you're standing on it!
+%%
+%% You don't have time to scan the floor, so assume the floor is an infinite horizontal line with a y coordinate equal to two plus the highest y coordinate of any point in your scan.
+%%
+%% In the example above, the highest y coordinate of any point is 9, and so the floor is at y=11. (This is as if your scan contained one extra rock path like -infinity,11 -> infinity,11.) With the added floor, the example above now looks like this:
+%%
+%%         ...........+........
+%%         ....................
+%%         ....................
+%%         ....................
+%%         .........#...##.....
+%%         .........#...#......
+%%         .......###...#......
+%%         .............#......
+%%         .............#......
+%%         .....#########......
+%%         ....................
+%% <-- etc #################### etc -->
+%% To find somewhere safe to stand, you'll need to simulate falling sand until a unit of sand comes to rest at 500,0, blocking the source entirely and stopping the flow of sand into the cave. In the example above, the situation finally looks like this after 93 units of sand come to rest:
+%%
+%% ............o............
+%% ...........ooo...........
+%% ..........ooooo..........
+%% .........ooooooo.........
+%% ........oo#ooo##o........
+%% .......ooo#ooo#ooo.......
+%% ......oo###ooo#oooo......
+%% .....oooo.oooo#ooooo.....
+%% ....oooooooooo#oooooo....
+%% ...ooo#########ooooooo...
+%% ..ooooo.......ooooooooo..
+%% #########################
+%% Using your scan, simulate the falling sand until the source of the sand becomes blocked. How many units of sand come to rest?
+solution2(X0-X2, Y0-Y2, Walls, Platforms, Rest) :-
+    clear_database,
+    read-input(input, (X0-X2,Y0-Y2,Walls,Platforms)),
+    assertz(sand(0, 0)),
+    assertz(void(-1, 0)),
+    Y3 is Y2 + 2,
+    keep_pour(Y3),
+    ( output(FileName),
+      OutAlias = output,
+      open(FileName, write, _Fd, [alias(OutAlias)]),
+      findall(X3, ( sand(X3,_),
+                    ground(X3),
+                    X3 =\= 0 ), Xs0), sort(Xs0, Xs3),
+      append([X4|_], [X5], Xs3),
+      write_map(OutAlias, (X4-1)-(X5+1), Y3),
+      close(OutAlias) ),
+    ( InAlias = input,
+      input2(FN),
+      open(FN, read, _Fd2, [alias(InAlias)]),
+      count(InAlias, o, R0),
+      close(InAlias) ),
+    Rest is R0 + 1.
+
+input2(File) :-
+    source_file(day14, F),
+    relative_file_name(File, F, 'day-14-2.output').
+
+count(StreamIn, Symbol, Result) :-
+    count(StreamIn, Symbol, 0, Result).
+
+count(StreamIn, _, Result, Result) :-
+    peek_char(StreamIn, end_of_file), !.
+count(StreamIn, Symbol, Acc, Result) :-
+    get_char(StreamIn, C),
+    ( C == Symbol,
+      Acc2 is Acc + 1, !
+    ; Acc2 = Acc
+    ),
+    count(StreamIn, Symbol, Acc2, Result).
