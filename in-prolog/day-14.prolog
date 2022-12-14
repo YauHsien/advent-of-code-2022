@@ -7,12 +7,13 @@ output(File) :-
     source_file(day14, F),
     relative_file_name(File, F, 'day-14.output').
 
-:- dynamic rock/2, void/2, pour/2.
+:- dynamic rock/2, void/2, pour/2, sand/2.
 :- assertz(pour(500, 0)).
 
 clear_database :-
     abolish(rock/2),
-    abolish(void/2).
+    abolish(void/2),
+    abolish(sand/2).
 
 read-input(StreamAlias, Result) :-
     input(FileName),
@@ -74,14 +75,16 @@ write_map(OutAlias, X0-X2, Y2) :-
                         ( X-Y = I-J,
                           put_char(OutAlias, +)
                         ; X-Y \= I-J,
+                          sand(X, Y),
+                          put_char(OutAlias, o)
+                        ; X-Y \= I-J,
                           rock(X, Y),
                           put_char(OutAlias, #)
                         ; X-Y \= I-J,
                           void(X, Y),
                           put_char(OutAlias, v)
                         ; X-Y \= I-J,
-                          \+ rock(X, Y),
-                          \+ rock(X, Y),
+                          air(X, Y),
                           put_char(OutAlias, '.')
                         ) )
                , put_char(OutAlias, '\n')
@@ -133,15 +136,71 @@ put_void(X0, X2, Y0, Y2) :-
     foreach( between(A, B, X),
              put_void(X, D-C) ).
 
-solution(X0-X2, Y0-Y2, Walls, Platforms) :-
+air(X, Y) :-
+    \+ rock(X, Y),
+    \+ sand(X, Y).
+
+meet_void :-
+    void(X, Y),
+    sand(X, Y).
+
+pour(Ylimit) :-
+    pour(X, Y),
+    pour1(Ylimit, sand(X, Y)).
+
+pour1(Y, sand(X, Y)) :- !,
+    ( sand(X, Y), !
+    ; assertz(void(X, Y)),
+      assertz(sand(X, Y))
+    ).
+pour1(_, sand(X, Y)) :-
+    void(X, Y), !,
+    assertz(sand(X, Y)).
+pour1(Ylimit, sand(X, Y)) :-
+    Y2 is Y + 1,
+    air(X, Y2), !,
+    pour1(Ylimit, sand(X, Y2)).
+pour1(Ylimit, sand(X, Y)) :-
+    X0 is X - 1,
+    Y2 is Y + 1,
+    air(X0, Y),
+    air(X0, Y2), !,
+    pour1(Ylimit, sand(X0, Y2)).
+pour1(Ylimit, sand(X, Y)) :-
+    X2 is X + 1,
+    Y2 is Y + 1,
+    air(X2, Y),
+    air(X2, Y2), !,
+    pour1(Ylimit, sand(X2, Y2)).
+pour1(_, sand(X, Y)) :-
+    assertz(sand(X, Y)).
+
+keep_pour(Ylimit) :-
+    repeat,
+    ( meet_void
+    ; \+ meet_void,
+      sand(_, Ylimit)
+    ; \+ meet_void,
+      pour(Ylimit),
+      fail
+    ).
+
+solution(X0-X2, Y0-Y2, Walls, Platforms, Rest) :-
     clear_database,
     read-input(input, (X0-X2,Y0-Y2,Walls,Platforms)),
     put_void(X0-1, X2+1, Y0, Y2),
+    assertz(sand(0, 0)),
+    keep_pour(Y2),
     ( output(FileName),
       OutAlias = output,
       open(FileName, write, _Fd, [alias(OutAlias)]),
       write_map(OutAlias, (X0-1)-(X2+1), Y2),
       close(OutAlias) ),
+    ( findall(_, ( sand(X, Y),
+                   \+ void(X, Y)
+                 ), L0),
+      sort(L0, L),
+      length(L, Rest) ),
     true.
 
 solution2(_).
