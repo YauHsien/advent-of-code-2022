@@ -3,6 +3,9 @@ day14.
 input(File) :-
     source_file(day14, F),
     relative_file_name(File, F, '../input/day-14.input').
+output(File) :-
+    source_file(day14, F),
+    relative_file_name(File, F, 'day-14.output').
 
 read-input(StreamAlias, Result) :-
     input(FileName),
@@ -46,9 +49,60 @@ pairs([A,B|L], [(A2,B2)|R]) :-
 % 2. Lower wall, when length of a wall is shorter than of a platform;
 % 3. Shorter platform, whe length of a wall is longer than of a platform.
 
+dots(WoPs, Dots) :-
+    dots(WoPs, [], Dots).
+
+dots([], Dots, Dots).
+dots([H|L], Acc, Dots) :-
+    findall(X0, ( member((X-Y,X-Z), H),
+                  between(Y, Z, D),
+                  X0 = X-D
+                ; member((X-Y,Z-Y), H),
+                  between(Y, Z, D),
+                  X0 = D-Y
+                ), R),
+    append(Acc, R, Acc2),
+    dots(L, Acc2, Dots).
+
+show_map(I-J, X-W, _-Z, Dots) :-
+    foreach( between(J, Z, Y0),
+             ( foreach( between(X, W, X0),
+                        ( X0-Y0 = I-J,
+                          write(x)
+                        ; X0-Y0 \= I-J,
+                          member(X0-Y0, Dots),
+                          write(#)
+                        ; X0-Y0 \= I-J,
+                          \+ member(X0-Y0, Dots),
+                          write('.')
+                        ) )
+             , nl
+             ) ).
+
+write_map(OutAlias, I-J, X-W, _-Z, Dots) :-
+    foreach( between(J, Z, Y0),
+             ( foreach( between(X, W, X0),
+                        ( X0-Y0 = I-J,
+                          put_char(OutAlias, x)
+                        ; X0-Y0 \= I-J,
+                          member(X0-Y0, Dots),
+                          put_char(OutAlias, #)
+                        ; X0-Y0 \= I-J,
+                          \+ member(X0-Y0, Dots),
+                          put_char(OutAlias, '.')
+                        ) )
+               , put_char(OutAlias, '\n')
+             ) ).
+
 solution(X0-X2, Y0-Y2, Walls, Platforms) :-
     Gen = 500-0,
     read-input(input, (X0-X2,Y0-Y2,Walls,Platforms)),
+    dots([Walls,Platforms], Dots),
+    ( output(FileName),
+      OutAlias = output,
+      open(FileName, write, _Fd, [alias(OutAlias)]),
+      write_map(OutAlias, Gen, X0-X2, Y0-Y2, Dots),
+      close(OutAlias) ),
     true.
 
 solution2(_).
