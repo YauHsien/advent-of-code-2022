@@ -210,11 +210,6 @@
 %%
 %% Figure out which monkeys to chase by counting how many items they inspect over 20 rounds. What is the level of monkey business after 20 rounds of stuff-slinging simian shenanigans?
 day11.
-
-:- pack_install(nan_numerics_prime).
-:- [library(nan_numerics_prime)].
-:- table nan_numerics_prime:prime_fact/2 as (incremental, shared).
-
 input(File) :-
     source_file(day11, F),
     relative_file_name(File, F, '../input/day-11.input').
@@ -235,12 +230,16 @@ get-result(StreamIn, Acc, Result) :-
 
 :- dynamic monkey/1,
            hold/2,
+           div_op/1,
            operation/3,
            test/2,
            on_true/2,
            on_false/2,
            inspect/2,
            worry_level/1.
+
+:- foreach(member(N,[2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97]),
+           assertz(div_op(N))).
 
 clear_database :-
     abolish(monkey/1),
@@ -252,37 +251,6 @@ clear_database :-
     abolish(inspect/2),
     abolish(worry_level/1).
 
-square([], []).
-square([A^E|L], [A^E2|R]) :-
-    E2 is E + 1,
-    square(L, R).
-
-double([2^E|L], [2^E2|L]) :- !,
-    E2 is E + 1.
-double(L, [2^1|L]).
-
-multiply([], [], []).
-multiply(L, [], L) :- L \= [].
-multiply([], L, L) :- L \= [].
-multiply([A^E|L], [A^F|Z], [A^E2|R]) :- !,
-    E2 is E + F,
-    multiply(L, Z, R).
-multiply([A^E|L], [B^F|Z], [A^E|R]) :-
-    A < B, !,
-    multiply(L, [B^F|Z], R).
-multiply([A^E|L], [B^F|Z], [B^F|R]) :-
-    multiply([A^E|L], Z, R).
-
-add(A, M, R) :-
-    consume(A, B0),
-    B is B0 + M,
-    prime_fact(B, R).
-
-consume([], 1).
-consume([A^E|L], R) :-
-    consume(L, R0),
-    R is A^E * R0.
-
 case_of(S, Acc, [monkey-Nth:[]|Acc]) :-
     string_concat("Monkey ", R, S),
     string_concat(Nth, ":", R),
@@ -291,16 +259,11 @@ case_of(S, Acc, [monkey-Nth:[]|Acc]) :-
 case_of(S, [monkey-Nth:K|Acc], [monkey-Nth:Items|Acc]) :-
     string_concat("  Starting items: ", R, S),
     split_string(R, ", ", "", R2),
-    worry_level(W),
     foreach(( member(X0, R2),
               number_string(X, X0),
-              ( W =:= 1,
-                prime_fact(X, F)
-              ; W =\= 1,
-                F = X
-              )
+              factorize(X, X2)
             ),
-            assertz(hold(Nth, F))),
+            assertz(hold(Nth, X2))),
     findall(X, (member(X0,R2),number_string(X,X0)), L),
     append(K, L, Items).
 case_of(S, [monkey-Nth:L|Acc], [monkey-Nth:L|Acc]) :-
@@ -309,34 +272,32 @@ case_of(S, [monkey-Nth:L|Acc], [monkey-Nth:L|Acc]) :-
     worry_level(W),
     ( Op = "*", Val2 == Val3, Val2 == "old",
       ( W =:= 1, !,
-        assertz(operation(Nth, A, B) :- square(A, B))
-      ; assertz(operation(Nth, A, B) :- B is (A*A) div W)
+        Q = (operation(Nth,A,A2) :- square(A,A2))
+      ; Q = (operation(Nth,A,A2) :- square(A,A0), eval(A0,A3), A4 is A3 div W, factorize(A4,A2))
       )
     ; Op = "+", Val2 == Val3, Val2 == "old",
       ( W =:= 1, !,
-        assertz(operation(Nth, A, B) :- double(A, B))
-      ; assertz(operation(Nth, A, B) :- B is (A+A) div W)
+        Q = (operation(Nth,A,A2) :- double(A,A2))
+      ; Q = (operation(Nth,A,A2) :- double(A,A0), eval(A0,A3), A4 is A3 div W, factorize(A4,A2))
       )
     ; Op = "*", Val2 == "old", number_string(M, Val3),
+      factorize(M, M0),
       ( W =:= 1, !,
-        prime_fact(M, M2),
-        assertz(operation(Nth, A, B) :- multiply(A, M2, B))
-      ; assertz(operation(Nth, A, B) :- B is (A*M) div W)
+        Q = (operation(Nth,A,A2) :- multiply(A,M0,A2))
+      ; Q = (operation(Nth,A,A2) :- multiply(A,M0,A0), eval(A0,A3), A4 is A3 div W, factorize(A4,A2))
       )
     ; Op = "+", Val2 == "old", number_string(M, Val3),
+      factorize(M, M0),
       ( W =:= 1, !,
-        %prime_fact(M, M2),
-        assertz(operation(Nth, A, B) :- add(A, M, B))
-      ; assertz(operation(Nth, A, B) :- B is (A+M) div W)
+        Q = (operation(Nth,A,A2) :- add(A,M0,A2))
+      ; Q = (operation(Nth,A,A2) :- add(A,M0,A0), eval(A0,A3), A4 is A3 div W, factorize(A4,A2))
       )
-    ).
+    ),
+    assertz(Q).
 case_of(S, [monkey-Nth:L|Acc], [monkey-Nth:L|Acc]) :-
     string_concat("  Test: divisible by ", R, S),
     number_string(N, R),
-    ( worry_level(1), !,
-      assertz(test(Nth, A) :- member(N^_, A))
-    ; assertz(test(Nth, A) :- A mod N =:= 0)
-    ).
+    assertz( test(Nth, A) :- member(N^_, A) ).
 case_of(S, [monkey-Nth:L|Acc], [monkey-Nth:L|Acc]) :-
     string_concat("    If true: throw to monkey ", Mth, S),
     assertz( on_true(Nth, Mth) ).
@@ -345,15 +306,85 @@ case_of(S, [monkey-Nth:L|Acc], [monkey-Nth:L|Acc]) :-
     assertz( on_false(Nth, Mth) ).
 case_of("", Acc, Acc).
 
+factorize(N, Fs) :-
+    findall(M, div_op(M), Ms),
+    factorize(N, Ms, [], Fs).
+
+factorize(1, [], Acc, R) :- !,
+    sort(Acc, R).
+factorize(N, [], Acc, R) :-
+    sort([N^1|Acc], R).
+factorize(N, [M|Ms], Acc, Fs) :-
+    fact(N, M, 0, F, N2), !,
+    factorize(N2, Ms, [F|Acc], Fs).
+factorize(N, [_|Ms], Acc, Fs) :-
+    factorize(N, Ms, Acc, Fs).
+
+fact(N, M, Acc, F, R) :-
+    N mod M =:= 0, !,
+    N2 is N div M,
+    fact(N2, M, Acc+1, F, R).
+fact(N, M, Acc, (M^Acc2), N) :-
+    Acc > 0,
+    Acc2 is Acc.
+
+square(Factors, Square) :-
+    findall(N^S2, (member(N^S,Factors),
+                   S2 is S * 2), Square).
+
+double([2^E|Factors], [2^E2|Factors]) :- !,
+    E2 is E + 1.
+double(Factors, [2^1|Factors]).
+
+multiply(Factors, Ms, R) :-
+    findall(M0, (member(M0^_,Factors)
+                ;member(M0^_,Ms)), Ms0),
+    sort(Ms0, Ms2),
+    findall(M0^E0, (member(M0,Ms2),
+                    findall(E0, (member(M0^E0,Factors)
+                                ;member(M0^E0,Ms)), L0),
+                    sum_list(L0, E0)), R).
+
+add(Factors, As, R) :-
+    intersection(Factors, As, As3),
+    As3 \= [], !,
+    findall(X, (member(X,Factors),
+                \+ member(X,As3)), As4),
+    findall(X, (member(X,As),
+                \+ member(X,As3)), As5),
+    eval(As4, R0),
+    eval(As5, R2),
+    R3 is R0 + R2,
+    factorize(R3, F0),
+    multiply(As3, F0, R5),
+    sort(R5, R).
+add(Factors, As, R) :-
+    eval(Factors, R0),
+    eval(As, R2),
+    R3 is R0 + R2,
+    factorize(R3, F0),
+    sort(F0, R).
+
+eval(Factors, R) :-
+    eval(Factors, 1, R).
+
+eval([], Acc, R) :- !,
+    R is Acc.
+eval([A^E|Factors], Acc, R) :-
+    eval(Factors, Acc*A^E, R).
+
 :- table big_op/3 as incremental.
 
 big_op(Nth, A, ( inc(Nth), once(retract(hold(Nth,A))), assertz(hold(Mth,R)) )) :-
     operation(Nth, A, R),
-    test(Nth, R), !,
-    on_true(Nth, Mth).
-big_op(Nth, A, ( inc(Nth), once(retract(hold(Nth,A))), assertz(hold(Mth,R)) )) :-
-    operation(Nth, A, R),
-    on_false(Nth, Mth).
+    %format("(~w) ~w --> ~w~n", [Nth, A, R]),
+    ( test(Nth, R), !,
+      %format("divisible !~n"),
+      on_true(Nth, Mth)
+    ; on_false(Nth, Mth)
+    ),
+    %format("sent to ~w~n", [Mth]),
+    true.
 
 pred_inspect(>, monkey-_:inspected_times-A, monkey-_:inspected_times-B) :-
     A>B.
@@ -412,8 +443,8 @@ solution(S) :-
 %% (In short, count by 10,000 rounds.)
 %% (It's hard fight to big, time-consuming computation.)
 
-%:- set_prolog_flag(stack_limit, 34_359_738_368).
-:- set_prolog_flag(stack_limit, 137_438_953_472).
+:- set_prolog_flag(stack_limit, 34_359_738_368).
+%:- set_prolog_flag(stack_limit, 137_438_953_472).
 
 solution2(fresh_start, Rounds) :-
     clear_database,
@@ -436,7 +467,7 @@ solution2(S) :-
     Times is Rounds div Unit - 1,
     solution2(fresh_start, Unit),
     foreach( between(1, Times, I),
-             ( format("- ~d ----~n", [(I-1)*Unit]),
+             ( format("- ~d ----~n", [(I+1)*Unit]),
                flush_output,
                time(solution2(continue, Unit))) ),
     findall( monkey-Nth:inspected_times-N,
