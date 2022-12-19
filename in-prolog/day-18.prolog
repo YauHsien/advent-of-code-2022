@@ -97,36 +97,78 @@ print_slice(Goal_view, L, I, Xm, Xx, Ym, Yx) :-
               nl )), !.
 % ?- read-input(input, I), J = 15, print_slice(x_view, I, J, 0, 21, 0, 21).
 
+% To find a box containing `Content`, ranging from `Xm-Xx`, `Ym-Yx`, `Zm-Zx`.
+% `Surface` and `Air` cell collections will be returned.
+context(Xm, Xx, Ym, Yx, Zm, Zx, Content, Surface, Air) :-
+    Xm0 is Xm - 1, Xx0 is Xx + 1,
+    Ym0 is Ym - 1, Yx0 is Yx + 1,
+    Zm0 is Zm - 1, Zx0 is Zx + 1,
+    findall((X,Y,Z), (between(Xm, Xx, X),
+                      between(Ym, Yx, Y),
+                      between(Zm, Zx, Z),
+                      \+ member((X,Y,Z), Content)), Air0),
+    sort(Air0, Air),
+    findall((X,Y,Z), (between(Xm0, Xx0, X),
+                      between(Ym0, Yx0, Y),
+                      between(Zm0, Zx0, Z),
+                      \+ member((X,Y,Z), Air),
+                      \+ member((X,Y,Z), Content)), Surface0),
+    sort(Surface0, Surface).
+
+interfaces(Air, Droplets, R) :-
+    findall(X-Y, (member(X, Air),
+                  member(Y, Droplets),
+                  adjacent(X, Y)), R0),
+    sort(R0, R).
+
+adjacent((X,Y,Z), (X,Y,W)) :- abs(W-Z) =:= 1.
+adjacent((X,Y,Z), (X,W,Z)) :- abs(W-Y) =:= 1.
+adjacent((X,Y,Z), (W,Y,Z)) :- abs(W-X) =:= 1.
+
+vacuum(Air, Surface, R) :-
+    findall(X, (member(X, Air),
+                member(Y, Surface),
+                adjacent(X, Y)), Air0),
+    ( [] = Air0
+    -> R = Surface
+    ; union(Air0, Surface, Mixed),
+      ( subtract(Air, Air0, Air3),
+        sort(Air3, Air2) ),
+      vacuum(Air2, Mixed, R) ).
+
 solution2(R) :-
     read-input(input, I),
-    ( findall(X, member((X,_,_),I), Xa),
+    sort(I, Droplets),
+    ( findall(X, member((X,_,_),Droplets), Xa),
       min_list(Xa, Xm),
       max_list(Xa, Xx) ),
-    ( findall(Y, member((_,Y,_),I), Ya),
+    ( findall(Y, member((_,Y,_),Droplets), Ya),
       min_list(Ya, Ym),
       max_list(Ya, Yx) ),
-    ( findall(Z, member((_,_,Z),I), Za),
+    ( findall(Z, member((_,_,Z),Droplets), Za),
       min_list(Za, Zm),
       max_list(Za, Zx) ),
-    ( findall((X,Y,Z), ( between(Xm, Xx, X),
-                   between(Ym, Yx, Y),
-                   between(Zm, Zx, Z),
-                   \+ member((X,Y,Z), I),
-                   X0 is X - 1,
-                   X2 is X + 1,
-                   Y0 is Y - 1,
-                   Y2 is Y + 1,
-                   Z0 is Z - 1,
-                   Z2 is Z + 1,
-                   member((X0,Y,Z), I),
-                   member((X2,Y,Z), I),
-                   member((X,Y0,Z), I),
-                   member((X,Y2,Z), I),
-                   member((X,Y,Z0), I),
-                   member((X,Y,Z2), I) ), As),
-      sort(As, Air_pockets),
-      length(Air_pockets, Air_pockets_count)
-    ),
-    ( solution(Old_exposed_count),
-      Exposed_count is Old_exposed_count - 6 * Air_pockets_count ),
-    R is Exposed_count.
+    context(Xm, Xx, Ym, Yx, Zm, Zx, Droplets, Surface, Air),
+    vacuum(Air, Surface, Mixed),
+    ( subtract(Mixed, Surface, Exterior_air0),
+      sort(Exterior_air0, Exterior_air) ),
+    ( subtract(Air, Exterior_air, Interior_air0),
+      sort(Interior_air0, Interior_air) ),
+    %( length(Droplets, Ds),
+    %  length(Surface, Ls),
+    %  length(Air, As),
+    %  length(Exterior_air, Es),
+    %  length(Interior_air, Is),
+    %  format("~d-~d~n~d-~d~n~d-~d~nDroplets: ~d~nSurface: ~d~nAir: ~d~nExterior Air: ~d~nInterior Air: ~d~n",
+    %         [Xm, Xx, Ym, Yx, Zm, Zx, Ds, Ls, As, Es, Is])
+    %),
+    %interfaces(Exterior_air, Droplets, If_e),
+    interfaces(Interior_air, Droplets, If_i),
+    %length(If_e, R_e),
+    length(If_i, R_i),
+    %writeln(R_e),
+    %writeln(R_i),
+    solution(R_d),
+    R is R_d - R_i.
+%% (By query `?- solution2(Count).`)
+%% Your puzzle answer was `Count`.
