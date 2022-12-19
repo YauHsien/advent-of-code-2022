@@ -236,6 +236,7 @@ get-result(StreamIn, Acc, Result) :-
            on_true/2,
            on_false/2,
            inspect/2,
+           mod/2,
            worry_level/1.
 
 :- foreach(member(N,[2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97]),
@@ -249,6 +250,7 @@ clear_database :-
     abolish(on_true/2),
     abolish(on_false/2),
     abolish(inspect/2),
+    abolish(mod/2),
     abolish(worry_level/1).
 
 case_of(S, Acc, [monkey-Nth:[]|Acc]) :-
@@ -260,10 +262,9 @@ case_of(S, [monkey-Nth:K|Acc], [monkey-Nth:Items|Acc]) :-
     string_concat("  Starting items: ", R, S),
     split_string(R, ", ", "", R2),
     foreach(( member(X0, R2),
-              number_string(X, X0),
-              factorize(X, X2)
+              number_string(X, X0)
             ),
-            assertz(hold(Nth, X2))),
+            assertz(hold(Nth, X))),
     findall(X, (member(X0,R2),number_string(X,X0)), L),
     append(K, L, Items).
 case_of(S, [monkey-Nth:L|Acc], [monkey-Nth:L|Acc]) :-
@@ -271,33 +272,32 @@ case_of(S, [monkey-Nth:L|Acc], [monkey-Nth:L|Acc]) :-
     split_string(R, " ", " ", ["new","=",Val2,Op,Val3]),
     worry_level(W),
     ( Op = "*", Val2 == Val3, Val2 == "old",
-      ( W =:= 1, !,
-        Q = (operation(Nth,A,A2) :- square(A,A2))
-      ; Q = (operation(Nth,A,A2) :- square(A,A0), eval(A0,A3), A4 is A3 div W, factorize(A4,A2))
+      ( W =< 1, !,
+        Q = (operation(Nth,A,(A*A)))
+      ; Q = (operation(Nth,A,A2) :- A2 is (A*A) div W)
       )
     ; Op = "+", Val2 == Val3, Val2 == "old",
-      ( W =:= 1, !,
-        Q = (operation(Nth,A,A2) :- double(A,A2))
-      ; Q = (operation(Nth,A,A2) :- double(A,A0), eval(A0,A3), A4 is A3 div W, factorize(A4,A2))
+      ( W =< 1, !,
+        Q = (operation(Nth,A,(A*2)))
+      ; Q = (operation(Nth,A,A2) :- A2 is (A+A) div W)
       )
     ; Op = "*", Val2 == "old", number_string(M, Val3),
-      factorize(M, M0),
-      ( W =:= 1, !,
-        Q = (operation(Nth,A,A2) :- multiply(A,M0,A2))
-      ; Q = (operation(Nth,A,A2) :- multiply(A,M0,A0), eval(A0,A3), A4 is A3 div W, factorize(A4,A2))
+      ( W =< 1, !,
+        Q = (operation(Nth,A,(A*M)))
+      ; Q = (operation(Nth,A,A2) :- A2 is (A*M) div W)
       )
     ; Op = "+", Val2 == "old", number_string(M, Val3),
-      factorize(M, M0),
-      ( W =:= 1, !,
-        Q = (operation(Nth,A,A2) :- add(A,M0,A2))
-      ; Q = (operation(Nth,A,A2) :- add(A,M0,A0), eval(A0,A3), A4 is A3 div W, factorize(A4,A2))
+      ( W =< 1, !,
+        Q = (operation(Nth,A,(A+M)))
+      ; Q = (operation(Nth,A,A2) :- A2 is (A+M) div W)
       )
     ),
     assertz(Q).
 case_of(S, [monkey-Nth:L|Acc], [monkey-Nth:L|Acc]) :-
     string_concat("  Test: divisible by ", R, S),
     number_string(N, R),
-    assertz( test(Nth, A) :- member(N^_, A) ).
+    assertz( mod(Nth, N) ),
+    assertz( test(Nth, A) :- A mod N =:= 0 ).
 case_of(S, [monkey-Nth:L|Acc], [monkey-Nth:L|Acc]) :-
     string_concat("    If true: throw to monkey ", Mth, S),
     assertz( on_true(Nth, Mth) ).
@@ -373,11 +373,35 @@ eval([], Acc, R) :- !,
 eval([A^E|Factors], Acc, R) :-
     eval(Factors, Acc*A^E, R).
 
-:- table big_op/3 as incremental.
+cascade_mod((A*1), K, R) :-
+    R is A mod K.
+cascade_mod((A*M), K, R) :-
+    M > 1, !,
+    ( % A = B*K+C, M = D*K+E, A*M = (B*K+C)*(D*K+E), (A*M)%K = ((B*K+C)*(D*K+E))%K
+        true
+    ),
+    M2 is M - 1,
+    cascade_mod((A*M2), K, R).
+
+mul_list([], 1).
+mul_list([X|L], R) :-
+    mul_list(L, R0),
+    R is R0 * X.
 
 big_op(Nth, A, ( inc(Nth), once(retract(hold(Nth,A))), assertz(hold(Mth,R)) )) :-
+    worry_level(W),
+    W =< 1, !,
+    ( findall(K, mod(_,K), K0),
+      mul_list(K0, K) ),
+    operation(Nth, A, R0),
+    R is R0 mod K,
+    test(Nth, R, Mth).
+big_op(Nth, A, (inc(Nth),once(retract(hold(Nth,A))),assertz(hold(Mth,R)))) :-
     operation(Nth, A, R),
-    %format("(~w) ~w --> ~w~n", [Nth, A, R]),
+    %format("(~w) ~w --> ~w (~w)~n", [Nth, A, R0, R]),
+    test(Nth, R, Mth).
+
+test(Nth, R, Mth) :-
     ( test(Nth, R), !,
       %format("divisible !~n"),
       on_true(Nth, Mth)
@@ -446,19 +470,27 @@ solution(S) :-
 :- set_prolog_flag(stack_limit, 34_359_738_368).
 %:- set_prolog_flag(stack_limit, 137_438_953_472).
 
-solution2(fresh_start, Rounds) :-
+solution2(fresh_start, Rounds, S) :-
     clear_database,
     W is 1,
     assertz(worry_level(W)),
     read-input(input, _Config),
-    solution2(continue, Rounds).
-solution2(continue, Rounds) :-
+    solution2(continue, Rounds, S).
+solution2(continue, Rounds, S) :-
     round(Rounds),
     foreach(( monkey(Nth),
               inspect(Nth, N)
             ),
             writeln(Nth: N) ),
-    true,
+    ( findall( monkey-Nth:inspected_times-N,
+               ( monkey(Nth),
+                 inspect(Nth, N)
+               ),
+               Inspection ),
+      predsort(pred_inspect, Inspection, S0),
+      append(_, [monkey-_:inspected_times-A,
+                 monkey-_:inspected_times-B], S0) ),
+    S is A * B,
     !.
 
 solution2(S) :-
